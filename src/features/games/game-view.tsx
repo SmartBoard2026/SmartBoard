@@ -1,5 +1,6 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useMemo, useState, useCallback } from 'react'
 import { useNavigate, useParams } from '@tanstack/react-router'
+import { Chess } from 'chess.js'
 import { Chessboard } from 'react-chessboard'
 import {
   ArrowLeft,
@@ -44,27 +45,32 @@ export function GameView() {
   const [moves, setMoves] = useState<Move[]>([])
   const [currentMoveIndex, setCurrentMoveIndex] = useState(-1)
   const [loading, setLoading] = useState(true)
-  const [boardSize, setBoardSize] = useState(560)
-  const boardContainerRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const container = boardContainerRef.current
-    if (!container) return
-
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const width = entry.contentRect.width
-        setBoardSize(Math.min(560, Math.floor(width - 32)))
-      }
-    })
-    observer.observe(container)
-    return () => observer.disconnect()
-  }, [])
 
   const currentFen =
     currentMoveIndex >= 0 && moves[currentMoveIndex]
       ? moves[currentMoveIndex].fen
       : START_FEN
+
+  const moveSquares = useMemo(() => {
+    const chess = new Chess()
+    return moves.map((move) => {
+      try {
+        const result = chess.move(move.notation)
+        return { from: result?.from ?? '', to: result?.to ?? '' }
+      } catch {
+        return { from: '', to: '' }
+      }
+    })
+  }, [moves])
+
+  const highlightStyles = useMemo(() => {
+    if (currentMoveIndex < 0 || !moveSquares[currentMoveIndex]) return {}
+    const { from, to } = moveSquares[currentMoveIndex]
+    const styles: Record<string, React.CSSProperties> = {}
+    if (from) styles[from] = { backgroundColor: 'rgba(255, 255, 0, 0.4)' }
+    if (to) styles[to] = { backgroundColor: 'rgba(255, 255, 0, 0.4)' }
+    return styles
+  }, [currentMoveIndex, moveSquares])
 
   const fetchGame = useCallback(async () => {
     const { data, error } = await supabase
@@ -101,7 +107,7 @@ export function GameView() {
       await fetchGame()
       const fetchedMoves = await fetchMoves()
       if (fetchedMoves && fetchedMoves.length > 0) {
-        setCurrentMoveIndex(fetchedMoves.length - 1)
+        setCurrentMoveIndex(0)
       }
       setLoading(false)
     }
@@ -229,17 +235,22 @@ export function GameView() {
           <div className='grid gap-6 lg:grid-cols-[1fr_300px]'>
             <Card>
               <CardContent className='flex items-center justify-center p-4'>
-                <div ref={boardContainerRef} className='w-full max-w-[560px]'>
+                <div className='w-full max-w-[560px]'>
                   <Chessboard
-                    position={currentFen}
-                    arePiecesDraggable={false}
-                    boardWidth={boardSize}
-                    customBoardStyle={{
-                      borderRadius: '8px',
-                      boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)',
+                    options={{
+                      id: 'game-board',
+                      position: currentFen,
+                      allowDragging: false,
+                      animationDurationInMs: 300,
+                      showAnimations: true,
+                      boardStyle: {
+                        borderRadius: '8px',
+                        boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)',
+                      },
+                      darkSquareStyle: { backgroundColor: '#345830' },
+                      lightSquareStyle: { backgroundColor: '#e8eddf' },
+                      squareStyles: highlightStyles,
                     }}
-                    customDarkSquareStyle={{ backgroundColor: '#345830' }}
-                    customLightSquareStyle={{ backgroundColor: '#e8eddf' }}
                   />
                 </div>
               </CardContent>
