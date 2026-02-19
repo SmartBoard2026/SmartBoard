@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, useMemo } from 'react'
 import { getCookie, setCookie, removeCookie } from '@/lib/cookies'
+import { supabase } from '@/lib/supabase'
 
 type Theme = 'dark' | 'light' | 'system'
 type ResolvedTheme = Exclude<Theme, 'system'>
@@ -7,6 +8,7 @@ type ResolvedTheme = Exclude<Theme, 'system'>
 const DEFAULT_THEME = 'system'
 const THEME_COOKIE_NAME = 'vite-ui-theme'
 const THEME_COOKIE_MAX_AGE = 60 * 60 * 24 * 365 // 1 year
+const VALID_THEMES: Theme[] = ['light', 'dark', 'system']
 
 type ThemeProviderProps = {
   children: React.ReactNode
@@ -42,7 +44,41 @@ export function ThemeProvider({
     () => (getCookie(storageKey) as Theme) || defaultTheme
   )
 
-  // Optimized: Memoize the resolved theme calculation to prevent unnecessary re-computations
+  // Al mount, carica le preferenze da Supabase se l'utente è loggato
+  useEffect(() => {
+    async function loadFromDb() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      const { data } = await supabase
+        .from('user_preferences')
+        .select('theme')
+        .eq('user_id', user.id)
+        .single()
+
+      if (data?.theme && VALID_THEMES.includes(data.theme as Theme)) {
+        const dbTheme = data.theme as Theme
+        setCookie(storageKey, dbTheme, THEME_COOKIE_MAX_AGE)
+        _setTheme(dbTheme)
+      }
+    }
+
+    loadFromDb()
+
+    // Ascolta i cambi di sessione (login/logout) per ricaricare o resettare
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_IN') loadFromDb()
+      if (event === 'SIGNED_OUT') {
+        removeCookie(storageKey)
+        _setTheme(DEFAULT_THEME)
+      }
+    })
+
+    return () => subscription.unsubscribe()
+  // storageKey è stabile, ma lo includiamo per correttezza
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storageKey])
+
   const resolvedTheme = useMemo((): ResolvedTheme => {
     if (theme === 'system') {
       return window.matchMedia('(prefers-color-scheme: dark)').matches
@@ -57,8 +93,8 @@ export function ThemeProvider({
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
 
     const applyTheme = (currentResolvedTheme: ResolvedTheme) => {
-      root.classList.remove('light', 'dark') // Remove existing theme classes
-      root.classList.add(currentResolvedTheme) // Add the new theme class
+      root.classList.remove('light', 'dark')
+      root.classList.add(currentResolvedTheme)
     }
 
     const handleChange = () => {
@@ -69,20 +105,34 @@ export function ThemeProvider({
     }
 
     applyTheme(resolvedTheme)
-
     mediaQuery.addEventListener('change', handleChange)
-
     return () => mediaQuery.removeEventListener('change', handleChange)
   }, [theme, resolvedTheme])
 
-  const setTheme = (theme: Theme) => {
-    setCookie(storageKey, theme, THEME_COOKIE_MAX_AGE)
-    _setTheme(theme)
+  const setTheme = async (newTheme: Theme) => {
+    // Aggiorna subito cookie e stato locale per risposta immediata
+    setCookie(storageKey, newTheme, THEME_COOKIE_MAX_AGE)
+    _setTheme(newTheme)
+
+    // Poi sincronizza con Supabase in background
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+
+    await supabase
+      .from('user_preferences')
+      .upsert({ user_id: user.id, theme: newTheme }, { onConflict: 'user_id' })
   }
 
-  const resetTheme = () => {
+  const resetTheme = async () => {
     removeCookie(storageKey)
     _setTheme(DEFAULT_THEME)
+
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+
+    await supabase
+      .from('user_preferences')
+      .upsert({ user_id: user.id, theme: DEFAULT_THEME }, { onConflict: 'user_id' })
   }
 
   const contextValue = {
@@ -103,8 +153,6 @@ export function ThemeProvider({
 // eslint-disable-next-line react-refresh/only-export-components
 export const useTheme = () => {
   const context = useContext(ThemeContext)
-
   if (!context) throw new Error('useTheme must be used within a ThemeProvider')
-
   return context
 }
