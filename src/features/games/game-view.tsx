@@ -72,6 +72,26 @@ export function GameView() {
     return styles
   }, [currentMoveIndex, moveSquares])
 
+  const movePairs = useMemo(() => {
+    const pairs: {
+      moveNumber: number
+      white: Move
+      black?: Move
+      whiteIndex: number
+      blackIndex?: number
+    }[] = []
+    for (let i = 0; i < moves.length; i += 2) {
+      pairs.push({
+        moveNumber: Math.floor(i / 2) + 1,
+        white: moves[i],
+        black: moves[i + 1],
+        whiteIndex: i,
+        blackIndex: i + 1 < moves.length ? i + 1 : undefined,
+      })
+    }
+    return pairs
+  }, [moves])
+
   const fetchGame = useCallback(async () => {
     const { data, error } = await supabase
       .from('games')
@@ -326,19 +346,44 @@ export function GameView() {
                         Nessuna mossa
                       </p>
                     ) : (
-                      <div className='grid grid-cols-2 gap-1'>
-                        {moves.map((move, index) => (
-                          <Button
-                            key={`${move.game_id}-${move.move_number}`}
-                            variant={
-                              index === currentMoveIndex ? 'default' : 'ghost'
-                            }
-                            size='sm'
-                            className='h-7 justify-start text-xs'
-                            onClick={() => setCurrentMoveIndex(index)}
+                      <div className='flex flex-col gap-1'>
+                        {movePairs.map((pair) => (
+                          <div
+                            key={pair.moveNumber}
+                            className='grid grid-cols-[30px_1fr_1fr] items-center gap-1'
                           >
-                            {move.move_number}. {move.notation}
-                          </Button>
+                            <span className='text-center text-xs text-muted-foreground'>
+                              {pair.moveNumber}.
+                            </span>
+                            <Button
+                              variant={
+                                pair.whiteIndex === currentMoveIndex
+                                  ? 'default'
+                                  : 'ghost'
+                              }
+                              size='sm'
+                              className='h-7 justify-start px-2 text-xs'
+                              onClick={() => setCurrentMoveIndex(pair.whiteIndex)}
+                            >
+                              {pair.white.notation}
+                            </Button>
+                            {pair.black && (
+                              <Button
+                                variant={
+                                  pair.blackIndex === currentMoveIndex
+                                    ? 'default'
+                                    : 'ghost'
+                                }
+                                size='sm'
+                                className='h-7 justify-start px-2 text-xs'
+                                onClick={() =>
+                                  setCurrentMoveIndex(pair.blackIndex!)
+                                }
+                              >
+                                {pair.black.notation}
+                              </Button>
+                            )}
+                          </div>
                         ))}
                       </div>
                     )}
