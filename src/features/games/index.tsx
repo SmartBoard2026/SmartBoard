@@ -1,5 +1,6 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useRef, useState, useMemo } from 'react'
 import { Link } from '@tanstack/react-router'
+import { Chess } from 'chess.js'
 import { format } from 'date-fns'
 import {
   Search,
@@ -10,6 +11,7 @@ import {
   Filter,
   Plus,
   Loader2,
+  Upload,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
@@ -74,6 +76,8 @@ export function Games() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [deleteGameId, setDeleteGameId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (!user) return
@@ -133,6 +137,71 @@ export function Games() {
     setDeleteGameId(null)
   }
 
+  async function importPgn(file: File) {
+    setImporting(true)
+    try {
+      const text = await file.text()
+      const chess = new Chess()
+      chess.loadPgn(text)
+
+      const whiteMatch = text.match(/\[White\s+"([^"]+)"\]/)
+      const blackMatch = text.match(/\[Black\s+"([^"]+)"\]/)
+      const white = whiteMatch?.[1] ?? 'Bianco'
+      const black = blackMatch?.[1] ?? 'Nero'
+      const title = `${white} vs ${black}`
+
+      const history = chess.history()
+      chess.reset()
+
+      const movesData: { move_number: number; notation: string; fen: string }[] = []
+      for (let i = 0; i < history.length; i++) {
+        chess.move(history[i])
+        movesData.push({
+          move_number: i + 1,
+          notation: history[i],
+          fen: chess.fen(),
+        })
+      }
+
+      if (movesData.length === 0) {
+        toast.error('Il file PGN non contiene mosse')
+        return
+      }
+
+      const { data: gameData, error: gameError } = await supabase
+        .from('games')
+        .insert({ user_id: user!.id, title, status: 'completed' })
+        .select('id')
+        .single()
+
+      if (gameError || !gameData) {
+        toast.error('Errore nella creazione della partita')
+        console.error(gameError)
+        return
+      }
+
+      const { error: movesError } = await supabase
+        .from('moves')
+        .insert(movesData.map((m) => ({ game_id: gameData.id, ...m })))
+
+      if (movesError) {
+        await supabase.from('games').delete().eq('id', gameData.id)
+        toast.error('Errore nel caricamento delle mosse')
+        console.error(movesError)
+        return
+      }
+
+      toast.success(`Partita "${title}" importata con ${movesData.length} mosse`)
+      fetchGames()
+    } catch (err) {
+      console.error(err)
+      toast.error('File PGN non valido o corrotto')
+    } finally {
+      setImporting(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
   const filteredGames = useMemo(() => {
     let result = [...games]
 
@@ -177,6 +246,29 @@ export function Games() {
                 <CardDescription>
                   Gestisci e rivedi le tue partite di scacchi
                 </CardDescription>
+              </div>
+              <div>
+                <input
+                  ref={fileInputRef}
+                  type='file'
+                  accept='.pgn'
+                  className='hidden'
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    if (file) importPgn(file)
+                  }}
+                />
+                <Button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={importing}
+                >
+                  {importing ? (
+                    <Loader2 className='mr-2 h-4 w-4 animate-spin' />
+                  ) : (
+                    <Upload className='mr-2 h-4 w-4' />
+                  )}
+                  Importa PGN
+                </Button>
               </div>
             </div>
             <div className='flex flex-col gap-3 pt-4 sm:flex-row sm:items-center'>
