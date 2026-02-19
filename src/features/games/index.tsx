@@ -56,15 +56,14 @@ import { ThemeSwitch } from '@/components/theme-switch'
 
 interface Game {
   id: string
-  name: string
-  status: 'in_progress' | 'finished'
+  title: string
+  status: 'in_progress' | 'completed'
   created_at: string
-  updated_at: string
   user_id: string
 }
 
 type SortOrder = 'newest' | 'oldest'
-type StatusFilter = 'all' | 'in_progress' | 'finished'
+type StatusFilter = 'all' | 'in_progress' | 'completed'
 
 export function Games() {
   const { user } = useAuth()
@@ -119,17 +118,6 @@ export function Games() {
 
   async function deleteGame(gameId: string) {
     setDeleting(true)
-    const { error: movesError } = await supabase
-      .from('moves')
-      .delete()
-      .eq('game_id', gameId)
-
-    if (movesError) {
-      toast.error('Errore nell\'eliminazione delle mosse')
-      setDeleting(false)
-      return
-    }
-
     const { error } = await supabase
       .from('games')
       .delete()
@@ -151,7 +139,7 @@ export function Games() {
     if (searchQuery) {
       const query = searchQuery.toLowerCase()
       result = result.filter((g) =>
-        g.name.toLowerCase().includes(query)
+        g.title.toLowerCase().includes(query)
       )
     }
 
@@ -195,7 +183,7 @@ export function Games() {
               <div className='relative flex-1'>
                 <Search className='absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground' />
                 <Input
-                  placeholder='Cerca partita per nome...'
+                  placeholder='Cerca partita per titolo...'
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className='pl-9'
@@ -213,7 +201,7 @@ export function Games() {
                   <SelectContent>
                     <SelectItem value='all'>Tutte</SelectItem>
                     <SelectItem value='in_progress'>In corso</SelectItem>
-                    <SelectItem value='finished'>Finite</SelectItem>
+                    <SelectItem value='completed'>Completate</SelectItem>
                   </SelectContent>
                 </Select>
                 <Select
@@ -254,7 +242,7 @@ export function Games() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Nome</TableHead>
+                      <TableHead>Titolo</TableHead>
                       <TableHead>Stato</TableHead>
                       <TableHead>Data</TableHead>
                       <TableHead className='text-right'>Azioni</TableHead>
@@ -264,7 +252,7 @@ export function Games() {
                     {filteredGames.map((game) => (
                       <TableRow key={game.id}>
                         <TableCell className='font-medium'>
-                          {game.name}
+                          {game.title}
                         </TableCell>
                         <TableCell>
                           {game.status === 'in_progress' ? (
@@ -274,7 +262,7 @@ export function Games() {
                             </Badge>
                           ) : (
                             <Badge variant='secondary'>
-                              Finita
+                              Completata
                             </Badge>
                           )}
                         </TableCell>

@@ -33,10 +33,9 @@ import { ThemeSwitch } from '@/components/theme-switch'
 
 interface Game {
   id: string
-  name: string
-  status: 'in_progress' | 'finished'
+  title: string
+  status: 'in_progress' | 'completed'
   created_at: string
-  updated_at: string
   user_id: string
 }
 
@@ -134,7 +133,7 @@ export function LiveGames() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Nome</TableHead>
+                      <TableHead>Titolo</TableHead>
                       <TableHead>Stato</TableHead>
                       <TableHead>Iniziata il</TableHead>
                       <TableHead className='text-right'>Azioni</TableHead>
@@ -144,7 +143,7 @@ export function LiveGames() {
                     {games.map((game) => (
                       <TableRow key={game.id}>
                         <TableCell className='font-medium'>
-                          {game.name}
+                          {game.title}
                         </TableCell>
                         <TableCell>
                           <Badge variant='default' className='bg-green-600 hover:bg-green-700'>

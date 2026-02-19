@@ -22,16 +22,17 @@ import { ThemeSwitch } from '@/components/theme-switch'
 
 interface Game {
   id: string
-  name: string
-  status: 'in_progress' | 'finished'
+  title: string
+  status: 'in_progress' | 'completed'
   created_at: string
 }
 
 interface Move {
-  id: string
   game_id: string
   move_number: number
+  notation: string
   fen: string
+  created_at: string
 }
 
 const START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'
@@ -123,7 +124,9 @@ export function GameView() {
         (payload) => {
           const newMove = payload.new as Move
           setMoves((prev) => {
-            const exists = prev.some((m) => m.move_number === newMove.move_number)
+            const exists = prev.some(
+              (m) => m.move_number === newMove.move_number
+            )
             if (exists) return prev
             const updated = [...prev, newMove].sort(
               (a, b) => a.move_number - b.move_number
@@ -207,7 +210,7 @@ export function GameView() {
           <ArrowLeft className='h-5 w-5' />
         </Button>
         <div className='flex-1'>
-          <h1 className='text-lg font-semibold'>{game.name}</h1>
+          <h1 className='text-lg font-semibold'>{game.title}</h1>
         </div>
         <div className='ms-auto flex items-center space-x-4'>
           {isLive && (
@@ -315,7 +318,7 @@ export function GameView() {
                       <div className='grid grid-cols-2 gap-1'>
                         {moves.map((move, index) => (
                           <Button
-                            key={move.id}
+                            key={`${move.game_id}-${move.move_number}`}
                             variant={
                               index === currentMoveIndex ? 'default' : 'ghost'
                             }
@@ -323,7 +326,7 @@ export function GameView() {
                             className='h-7 justify-start text-xs'
                             onClick={() => setCurrentMoveIndex(index)}
                           >
-                            {move.move_number}.
+                            {move.move_number}. {move.notation}
                           </Button>
                         ))}
                       </div>
