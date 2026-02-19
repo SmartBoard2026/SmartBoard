@@ -40,11 +40,6 @@ export function ProfileDropdown() {
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
             <DropdownMenuItem asChild>
-              <Link to='/settings'>
-                Profilo
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
               <Link to='/settings/appearance'>
                 Aspetto
               </Link>

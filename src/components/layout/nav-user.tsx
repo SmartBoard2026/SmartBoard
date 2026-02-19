@@ -71,12 +71,6 @@ export function NavUser() {
               <DropdownMenuSeparator />
               <DropdownMenuGroup>
                 <DropdownMenuItem asChild>
-                  <Link to='/settings'>
-                    <UserCog />
-                    Profilo
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
                   <Link to='/settings/appearance'>
                     <Palette />
                     Aspetto
