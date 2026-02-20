@@ -2,8 +2,8 @@ import { useState } from 'react'
 import { z } from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Link, useNavigate } from '@tanstack/react-router'
-import { Loader2, LogIn } from 'lucide-react'
+import { useNavigate } from '@tanstack/react-router'
+import { Loader2, KeyRound } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth } from '@/context/auth-provider'
 import { cn } from '@/lib/utils'
@@ -16,54 +16,47 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form'
-import { Input } from '@/components/ui/input'
 import { PasswordInput } from '@/components/password-input'
 
-const formSchema = z.object({
-  email: z.email({
-    error: (iss) => (iss.input === '' ? 'Inserisci la tua email' : undefined),
-  }),
-  password: z
-    .string()
-    .min(1, 'Inserisci la tua password')
-    .min(7, 'La password deve essere di almeno 7 caratteri'),
-})
+const formSchema = z
+  .object({
+    password: z
+      .string()
+      .min(1, 'Inserisci la nuova password')
+      .min(7, 'La password deve essere di almeno 7 caratteri'),
+    confirmPassword: z.string().min(1, 'Conferma la nuova password'),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: 'Le password non coincidono.',
+    path: ['confirmPassword'],
+  })
 
-interface UserAuthFormProps extends React.HTMLAttributes<HTMLFormElement> {
-  redirectTo?: string
-}
-
-export function UserAuthForm({
+export function ResetPasswordForm({
   className,
-  redirectTo,
   ...props
-}: UserAuthFormProps) {
+}: React.HTMLAttributes<HTMLFormElement>) {
   const [isLoading, setIsLoading] = useState(false)
   const navigate = useNavigate()
-  const { signIn } = useAuth()
+  const { updatePassword } = useAuth()
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
-    defaultValues: {
-      email: '',
-      password: '',
-    },
+    defaultValues: { password: '', confirmPassword: '' },
   })
 
   async function onSubmit(data: z.infer<typeof formSchema>) {
     setIsLoading(true)
 
-    const { error } = await signIn(data.email, data.password)
+    const { error } = await updatePassword(data.password)
 
     if (error) {
-      toast.error(error.message || 'Errore durante il login')
+      toast.error(error.message || 'Errore durante il reset della password')
       setIsLoading(false)
       return
     }
 
-    toast.success('Benvenuto!')
-    const targetPath = redirectTo || '/'
-    navigate({ to: targetPath, replace: true })
+    toast.success('Password aggiornata con successo!')
+    navigate({ to: '/sign-in', replace: true })
     setIsLoading(false)
   }
 
@@ -76,12 +69,12 @@ export function UserAuthForm({
       >
         <FormField
           control={form.control}
-          name='email'
+          name='password'
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Email</FormLabel>
+              <FormLabel>Nuova password</FormLabel>
               <FormControl>
-                <Input placeholder='nome@esempio.com' {...field} />
+                <PasswordInput placeholder='********' {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -89,18 +82,10 @@ export function UserAuthForm({
         />
         <FormField
           control={form.control}
-          name='password'
+          name='confirmPassword'
           render={({ field }) => (
-            <FormItem className='relative'>
-              <div className='flex items-center justify-between'>
-                <FormLabel>Password</FormLabel>
-                <Link
-                  to='/forgot-password'
-                  className='text-sm underline underline-offset-4 hover:text-primary'
-                >
-                  Password dimenticata?
-                </Link>
-              </div>
+            <FormItem>
+              <FormLabel>Conferma nuova password</FormLabel>
               <FormControl>
                 <PasswordInput placeholder='********' {...field} />
               </FormControl>
@@ -109,8 +94,8 @@ export function UserAuthForm({
           )}
         />
         <Button className='mt-2' disabled={isLoading}>
-          {isLoading ? <Loader2 className='animate-spin' /> : <LogIn />}
-          Accedi
+          {isLoading ? <Loader2 className='animate-spin' /> : <KeyRound />}
+          Aggiorna password
         </Button>
       </form>
     </Form>
