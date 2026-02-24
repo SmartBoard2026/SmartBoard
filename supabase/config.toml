@@ -20,3 +20,15 @@ entrypoint = "./functions/api-docs/index.ts"
 # Specifies static files to be bundled with the function. Supports glob patterns.
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/api-docs/*.html" ]
+
+[functions.create-game]
+verify_jwt = false
+
+[functions.get-games]
+verify_jwt = false
+
+[functions.resign-game]
+verify_jwt = false
+
+[functions.submit-move]
+verify_jwt = false

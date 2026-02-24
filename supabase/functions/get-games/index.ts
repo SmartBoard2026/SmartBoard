@@ -1,92 +1,112 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+// supabase/functions/get-games/index.ts
+import { OpenAPIHono, createRoute, z } from "https://esm.sh/@hono/zod-openapi@0.16.0";
+import { swaggerUI } from "https://esm.sh/@hono/swagger-ui@0.4.1";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { verify } from "https://deno.land/x/djwt@v2.9/mod.ts";
+import { verifyToken } from "../_shared/auth.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+// ─── Schemas ─────────────────────────────────────────────────────────────────
 
-let cachedPublicKey: CryptoKey | null = null;
+const GameItem = z.object({
+  id: z.string().uuid(),
+  title: z.string(),
+  status: z.string(),
+  winner: z.string().nullable(),
+  created_at: z.string(),
+});
 
-async function getSupabasePublicKey(): Promise<CryptoKey> {
-  if (cachedPublicKey) return cachedPublicKey;
+const GamesResponse = z.object({
+  success: z.boolean(),
+  games: z.array(GameItem),
+});
 
-  const jwksUrl = `${Deno.env.get("SUPABASE_URL")}/auth/v1/.well-known/jwks.json`;
-  const resp = await fetch(jwksUrl);
-  if (!resp.ok) throw new Error("Impossibile recuperare JWKS");
-  const { keys } = await resp.json();
+const ErrorResponse = z.object({
+  error: z.string(),
+});
 
-  const jwk = keys.find((k: any) => k.alg === "ES256" || k.kty === "EC");
-  if (!jwk) throw new Error("Chiave ES256 non trovata nel JWKS");
+// ─── Route ────────────────────────────────────────────────────────────────────
 
-  cachedPublicKey = await crypto.subtle.importKey(
-    "jwk",
-    jwk,
-    { name: "ECDSA", namedCurve: "P-256" },
-    false,
-    ["verify"]
+const route = createRoute({
+  method: "get",
+  path: "/get-games",
+  summary: "Lista partite",
+  description: "Restituisce le partite dell'utente autenticato filtrate per stato.",
+  tags: ["Games"],
+  security: [{ bearerAuth: [] }],
+  request: {
+    query: z.object({
+      status: z.string().optional().default("in_progress"),
+    }),
+  },
+  responses: {
+    200: {
+      content: { "application/json": { schema: GamesResponse } },
+      description: "Lista partite",
+    },
+    401: {
+      content: { "application/json": { schema: ErrorResponse } },
+      description: "Non autorizzato",
+    },
+    500: {
+      content: { "application/json": { schema: ErrorResponse } },
+      description: "Errore interno del server",
+    },
+  },
+});
+
+// ─── App ─────────────────────────────────────────────────────────────────────
+
+const app = new OpenAPIHono();
+
+app.use("*", async (c, next) => {
+  await next();
+  c.res.headers.set("Access-Control-Allow-Origin", "*");
+  c.res.headers.set("Access-Control-Allow-Headers", "authorization, x-client-info, apikey, content-type");
+});
+
+app.options("*", (c) => c.text("ok", 200));
+
+app.doc("/get-games/openapi.json", {
+  openapi: "3.0.0",
+  info: { title: "Get Games API", version: "1.0.0" },
+  components: {
+    securitySchemes: {
+      bearerAuth: { type: "http", scheme: "bearer", bearerFormat: "JWT" },
+    },
+  },
+});
+
+app.get("/get-games/docs", swaggerUI({ url: "/get-games/openapi.json" }));
+
+app.openapi(route, async (c) => {
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader) return c.json({ error: "Non autorizzato" }, 401);
+
+  let user_id: string;
+  try {
+    user_id = await verifyToken(authHeader);
+  } catch (e) {
+    return c.json({ error: "Token non valido: " + e.message }, 401);
+  }
+
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
 
-  return cachedPublicKey;
-}
+  const { status } = c.req.valid("query");
 
-async function verifyToken(authHeader: string): Promise<string> {
-  const token = authHeader.replace("Bearer ", "");
-  const publicKey = await getSupabasePublicKey();
-  const payload = await verify(token, publicKey, { algorithms: ["ES256"] });
-  const user_id = payload.sub;
-  if (!user_id) throw new Error("sub mancante nel token");
-  return user_id as string;
-}
+  const { data, error } = await supabase
+    .from("games")
+    .select("id, title, status, winner, created_at")
+    .eq("user_id", user_id)
+    .eq("status", status)
+    .order("created_at", { ascending: false });
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (error) return c.json({ error: String(error) }, 500);
 
-  try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Non autorizzato" }), { status: 401, headers: corsHeaders });
-    }
-
-    let user_id: string;
-    try {
-      user_id = await verifyToken(authHeader);
-    } catch (e) {
-      return new Response(JSON.stringify({ error: "Token non valido: " + e.message }), { status: 401, headers: corsHeaders });
-    }
-
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
-
-    let status = "in_progress";
-    if (req.method === "POST") {
-      const body = await req.json().catch(() => ({}));
-      status = body.status ?? "in_progress";
-    } else {
-      const url = new URL(req.url);
-      status = url.searchParams.get("status") ?? "in_progress";
-    }
-
-    const { data, error } = await supabase
-      .from("games")
-      .select("id, title, status, winner, created_at")
-      .eq("user_id", user_id)
-      .eq("status", status)
-      .order("created_at", { ascending: false });
-
-    if (error) throw error;
-
-    return new Response(
-      JSON.stringify({ success: true, games: data }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  } catch (err) {
-    return new Response(
-      JSON.stringify({ error: String(err) }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
+  return c.json({ success: true, games: data });
 });
+
+app.notFound((c) => c.json({ error: "not found", path: c.req.path }, 404));
+
+Deno.serve(app.fetch);
