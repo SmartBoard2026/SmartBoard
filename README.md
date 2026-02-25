@@ -30,7 +30,8 @@ cp .env.example .env
 ```bash
 bashdocker compose up --build
 ```
-Il sito sarà disponibile su http://localhost:3000
+Il sito sarà disponibile su http://localhost:3000 
+
 3. Altri comandi utili:
 ```bash
 bashdocker compose up --build -d    # avvia in background (detached)
