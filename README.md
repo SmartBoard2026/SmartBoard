@@ -21,6 +21,23 @@ pnpm install
 pnpm run dev
 ```
 
+## Avivare il progetto con Docker
+1. Copia .env.example in .env e cambia le variabili di ambiente con i valori di supabase reali.
+```bash
+cp .env.example .env
+```
+2. Avvia con docker-compose:
+```bash
+bashdocker compose up --build
+```
+Il sito sarà disponibile su http://localhost:3000
+3. Altri comandi utili:
+```bash
+bashdocker compose up --build -d    # avvia in background (detached)
+docker compose down             # ferma e rimuove i container
+docker compose logs -f          # vedi i log in tempo reale
+```
+
 ## Licenza
 
 Distribuito sotto licenza [MIT](./LICENSE).

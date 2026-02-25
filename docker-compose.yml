@@ -1,0 +1,13 @@
+services:
+  smartboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Passa le variabili dal .env allo stage di build (necessario per Vite)
+        - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
+        - VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
+    container_name: smartboard-app
+    ports:
+      - "3000:80"
+    restart: unless-stopped
